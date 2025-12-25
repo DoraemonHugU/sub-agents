@@ -1,0 +1,38 @@
+#!/bin/bash
+# Sub-Agent MCP Server 启动脚本
+# 使用方法: ./start_server [port] [env_file]
+
+PORT=${1:-8018}
+ENV_FILE=${2:-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_EXE="$SCRIPT_DIR/.venv/Scripts/python.exe"
+SERVER_SCRIPT="$SCRIPT_DIR/src/server.py"
+
+echo "========================================"
+echo "  Sub-Agent MCP Server"
+echo "========================================"
+echo "Port: $PORT"
+if [ -n "$ENV_FILE" ]; then
+    echo "Env:  $ENV_FILE"
+fi
+echo "URL:  http://127.0.0.1:$PORT/mcp"
+echo "----------------------------------------"
+
+# 检查是否已有进程占用端口
+if netstat -ano 2>/dev/null | grep -q ":$PORT.*LISTENING"; then
+    echo "⚠️  端口 $PORT 已被占用！"
+    echo "   使用以下命令查看: netstat -ano | findstr :$PORT"
+    echo "   或使用其他端口: ./start_server.sh 8019"
+    exit 1
+fi
+
+echo "----------------------------------------"
+echo "启动中... (Ctrl+C 停止)"
+echo ""
+
+# 启动服务器
+if [ -n "$ENV_FILE" ]; then
+    "$PYTHON_EXE" "$SERVER_SCRIPT" --transport http --port "$PORT" --env-file "$ENV_FILE"
+else
+    "$PYTHON_EXE" "$SERVER_SCRIPT" --transport http --port "$PORT"
+fi

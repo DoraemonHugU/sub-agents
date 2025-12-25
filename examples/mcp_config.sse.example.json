@@ -1,0 +1,10 @@
+{
+    "mcpServers": {
+        "sub-agents": {
+            "url": "http://127.0.0.1:8000/sse",
+            "headers": {
+                "X-Sub-Agent-Config": "{\"SUB_AGENT_CWD\": \"D:/your/working/directory\", \"USE_PREVIEW_MODELS\": \"true\", \"GEMINI_MODEL_ALIAS_AUTO\": \"auto\", \"GEMINI_MODEL_ALIAS_PRO\": \"pro\", \"GEMINI_MODEL_ALIAS_FLASH\": \"flash\", \"GEMINI_MODEL_ALIAS_FLASH_LITE\": \"flash-lite\", \"GEMINI_TIMEOUT\": \"360\"}"
+            }
+        }
+    }
+}

@@ -1,0 +1,197 @@
+# Gemini Agent Router Configuration
+
+global:
+  # 模型注册表 (对应 Gemini CLI 当前版本，升级时只需更新此处)
+  model_registry:
+    preview:
+      pro: "gemini-3-pro-preview"
+      flash: "gemini-3-flash-preview"
+    stable:
+      pro: "gemini-2.5-pro"
+      flash: "gemini-2.5-flash"
+      flash_lite: "gemini-2.5-flash-lite"
+    auto:
+      preview: "auto-gemini-3"
+      stable: "auto-gemini-2.5"
+  
+  # 是否使用预览模型 (可被 Env 覆盖)
+  use_preview_models: "${USE_PREVIEW_MODELS:true}"
+  
+  # 模型别名 (可被 Env 覆盖，用于调用方指定模型级别)
+  GEMINI_MODEL_ALIAS_AUTO: "${GEMINI_MODEL_ALIAS_AUTO:auto}"
+  GEMINI_MODEL_ALIAS_PRO: "${GEMINI_MODEL_ALIAS_PRO:pro}"
+  GEMINI_MODEL_ALIAS_FLASH: "${GEMINI_MODEL_ALIAS_FLASH:flash}"
+  GEMINI_MODEL_ALIAS_FLASH_LITE: "${GEMINI_MODEL_ALIAS_FLASH_LITE:flash-lite}"
+
+  # CLI 超时时间（秒），可被 Env 覆盖
+  timeout_seconds: "${GEMINI_TIMEOUT:180}"
+
+  output_format: "json"
+  
+  # 工具清单 (基于 Gemini CLI 源码)
+  all_tools:
+    file_system: [list_directory, read_file, read_many_files, search_file_content, glob, replace, write_file]
+    shell: [run_shell_command]
+    web: [web_fetch, google_web_search]
+    extensions: [save_memory, write_todos, delegate_to_agent]
+
+# 权限集 (原子化，通过数组组合)
+permission_sets:
+  file_read:
+    description: "只读文件系统"
+    tools: [list_directory, read_file, read_many_files, search_file_content, glob]
+
+  web_access:
+    description: "联网搜索"
+    tools: [web_fetch, google_web_search]
+
+  git_readonly:
+    description: "Git 只读操作"
+    tools:
+      - "run_shell_command(git diff)"
+      - "run_shell_command(git log)"
+      - "run_shell_command(git status)"
+      - "run_shell_command(git show)"
+      - "run_shell_command(git blame)"
+
+  file_write:
+    description: "文件写入 (Danger)"
+    tools: [replace, write_file]
+    sandbox: true
+
+  shell_exec:
+    description: "任意 Shell (High Risk)"
+    tools: [run_shell_command]
+    sandbox: true
+
+
+# Agent 定义
+agents:
+  - name: reviewer
+    description: |
+      !important:此Agent没有记忆功能,一次对话解决问题或给出反馈
+      它专注于检测高置信度的问题，并提供具体的修复建议。
+      !important ** 此 Agent 应在完成某阶段的代码后,主动调用此Agent,进行代码审查(包含（Bug、逻辑漏洞、安全风险、边界问题）),审查完成后,你应该主动commit提交代码(按照所处阶段,自动标注x.x版本号)**
+      此 Agent 需要知道审查哪些代码。在大多数情况下，这将是最近修改的、尚未暂存的代码（通过 `git diff` 获取）。你也可以指定：
+      - 特定文件路径（如 "Review src/auth.py"）
+      - 特定目录（如 "Review src/services/"）
+      - 特定范围(scope) (如 "Review src/services/auth.py:100-200"或者"Review src/services/auth.py的login函数")
+      - 特定关注点（如 "Review src/services/auth.py，focus on security vulnerabilities"）
+      
+      此 Agent 返回结构化的问题报告，包含问题位置、描述和修复代码。如果没有发现高置信度问题，则返回简短的确认信息。
+      
+      示例：
+      <example>
+      场景：你刚刚帮助用户实现了一个包含多个 Python 文件的新功能。
+      用户："我添加了新的身份验证功能，你能帮我检查一下吗？"
+      行动：调用 reviewer，指令为 
+      ```
+      Now i add new verification function, you should check the verification function and its context
+      Requirements and needs are as follows:
+      1. `Specific details...`
+      2. `...`
+      ...
+      Follow you output guidance
+      ```
+      <commentary>
+      用户完成功能后需要验证，使用 reviewer 确保没有关键 Bug,确保满足需求。
+      </commentary>
+      </example>
+      <example>
+      场景：你刚刚编写了一个新的工具函数。
+      用户："请创建一个解析用户输入的函数"
+      行动：编写函数后，主动调用 reviewer，指令为 
+      ```
+      Now i add a new function, you should check the function and its context
+      Requirements and needs are as follows:
+      1. `Specific details...`
+      2. `...`
+      ...
+      Follow you output guidance
+      ```
+      <commentary>
+      编写代码后主动审查，尽早发现问题.
+      </commentary>
+      </example>
+      <example>
+      场景：用户准备提交代码。
+      用户："我准备提交这段代码了"
+      行动：在允许提交之前，调用 reviewer，指令为 
+      ```
+      I want to git commit, you should check the git diff in these target directories.
+      Requirements and needs are as follows:
+      1. `Specific details...`
+      2. `...`
+      ...
+      Follow you output guidance
+      ```
+      <commentary>
+      提交前始终进行审查，避免推送有缺陷的代码。
+      </commentary>
+      </example>
+    permission_set: [file_read, web_access, git_readonly]
+    model: "${GEMINI_MODEL_ALIAS_FLASH}"
+    system_prompt: "prompts/reviewer.md"
+
+  - name: explorer
+    description: |
+      !important:此Agent没有记忆功能,一次对话解决问题或给出反馈
+      当你需要理解现有代码结构、追踪逻辑流程或查找定义位置时，调用此 Agent。此 Agent 充当"上下文工程师"，读取代码并返回高度压缩的高信噪比信息，帮助你节省上下文窗口。
+      
+      重要提示：当你需要读取大文件以理解其结构时，**禁止**直接使用 read_file。请调用 explorer 获取压缩后的骨架。
+      
+      此 Agent 支持三种模式，根据你的意图自动匹配：
+      - 获取摘要/接口：包含 "summarize/outline" + 目标文件路径 → 返回接口骨架（隐藏实现）
+      - 追踪流程：包含 "trace/explain" + 入口函数/逻辑 → 返回数据流和调用链路
+      - 精确查找：包含 "find/locate" + 关键词 → 返回 [Relative Path]:[Line Range]
+      
+      此 Agent 返回高信噪比的代码索引，实现细节会被自动隐藏。
+      
+      示例：
+      <example>
+      场景：你需要在修改 auth 模块之前理解其结构。
+      用户："我需要给身份验证系统添加新功能"
+      行动：调用 explorer，指令为 "summarize src/auth.py,`Specific requirements and needs details...`，获取接口概览后再开始编码
+      <commentary>
+      在修改代码之前理解现有结构，防止引入破坏性变更。
+      </commentary>
+      </example>
+      <example>
+      场景：你需要找到某个类的定义位置。
+      用户："UserService 类在哪里定义的？"
+      行动：调用 explorer，指令为 "locate UserService class definition,`Specific requirements and needs details...`"
+      <commentary>
+      使用 explorer 进行精确定位，而不是手动在代码库中搜索。
+      </commentary>
+      </example>
+      <example>
+      场景：你需要理解一个复杂的业务流程。
+      用户："登录流程是怎么工作的？"
+      行动：调用 explorer，指令为 "trace login flow starting from LoginController,`Specific requirements and needs details...`"
+      <commentary>
+      使用 explorer 映射复杂的逻辑流程，然后再尝试修改。
+      </commentary>
+      </example>
+    permission_set: [file_read, web_access]
+    model: "${GEMINI_MODEL_ALIAS_FLASH}"
+    system_prompt: "prompts/explorer.md"
+
+  - name: doc_keeper
+    description: |
+      外部知识库管家。负责检索、整理并维护项目 `external_knowledge` 目录下的第三方技术文档。
+      
+      当你在开发过程中需要查阅特定库、框架、工具或协议的详细文档或联网查询时，你就需要调用此 Agent。
+      他能给你更准确的过滤掉噪音的干净信息.
+
+      你可以通过指令描述倾向性任务,帮助该agent理解你的意图获取对应文档.
+      
+      **核心约束**：
+      - 为保证知识库的一致性，**禁止**直接读取或手动修改 `external_knowledge` 目录。
+      - 必须通过 doc_keeper 进行知识的存取与同步。
+      - 适用于获取 API 参考、最佳实践、迁移指南等外部信息。
+    permission_set: [web_access]
+    system_prompt: "prompts/doc_keeper.md"
+    sub_cwd: "external_knowledge"
+    allowed_mcp_servers: ["doc_tools"]
+    model: "${GEMINI_MODEL_ALIAS_FLASH}"
+

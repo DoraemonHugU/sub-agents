@@ -1,0 +1,33 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+.vscode
+.ruff_cache/
+.pytest_cache
+
+# logs
+# Virtual environments
+.venv
+.env
+
+# Local Configuration (Sensitive)
+mcp_config.json
+
+# Logs
+logs/
+*.log
+
+
+# References
+claude-code-offi-prompts/
+
+# Internal docs (may open source later)
+/docs
+
+# Test workspace
+_test_workspace/

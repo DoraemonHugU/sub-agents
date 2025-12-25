@@ -1,0 +1,19 @@
+{
+    "mcpServers": {
+        "sub-agents": {
+            "command": "/path/to/your/python",
+            "args": [
+                "/path/to/src/server.py"
+            ],
+            "env": {
+                "SUB_AGENT_CWD": "/path/your/project",
+                "USE_PREVIEW_MODELS": "true",
+                "GEMINI_MODEL_ALIAS_AUTO": "auto",
+                "GEMINI_MODEL_ALIAS_PRO": "pro",
+                "GEMINI_MODEL_ALIAS_FLASH": "flash",
+                "GEMINI_MODEL_ALIAS_FLASH_LITE": "flash-lite",
+                "GEMINI_TIMEOUT": "360"
+            }
+        }
+    }
+}
